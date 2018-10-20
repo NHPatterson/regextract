@@ -1,0 +1,93 @@
+---
+title: "regextract usage"
+author: "Nathan Heath Patterson, Vanderbilt University"
+date: "October 20, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Install Cardinal and regextract
+This package assumes some basic familiarity with Cardinal for IMS data analysis, including how to load and process raw data for analysis with the package. If you are unclear on these steps, see the Cardinal website : https://cardinalmsi.org
+```{r installation, eval=FALSE}
+#install Cardinal
+source("http://bioconductor.org/biocLite.R")
+biocLite("Cardinal")
+
+#install devtools from CRAN
+install.packages('devtools')
+
+#install regextract
+devtools::install_github('nhpatterson/regextract')
+```
+
+## Load required package
+```{r loadpackages, message=FALSE}
+#load regextract, this loads Cardinal as well
+require(regextract)
+
+```
+
+## Load in example IMS data from github
+```{r loadimsdata}
+load(url('https://github.com/NHPatterson/random_data/raw/master/rk_gloms/ims_data/rk_peaks.RData'))
+```
+
+## Plot an ion image to see IMS canvas
+```{r plotimage}
+image(rk_peaks, mz=766.7)
+```
+
+Note that the coordinates here start around 200 and 400 for x and y respectively. This means they are NOT minimized. Minimizes coordinates start at 1 in both x and y. 
+
+You can minimize coordinates with the ```reduceXYcardinal``` function as shown below, but we will use the native unreduced for the rest of this example. 
+```{r minimizecoords, eval=F}
+rk_peaks <- reduceXYcardinal(rk_peaks)
+```
+
+## Load in the extracted ROIs key
+This key is generated with the regToolboxMSRC python package (https://github.com/nhpatterson/regToolboxMSRC). Here we have annotated 10 glomeruli on the H&E image associated with this data set.
+```{r loadroiinfo}
+gloms_key <- importSpatialCorrKey(url('https://github.com/NHPatterson/random_data/raw/master/rk_gloms/ims_data/rk_gloms_ROI_key.csv'), overlap_thresh = 0.1)
+```
+
+The names of these ROIs are set in ImageJ. 
+
+## Add ROI data to Cardinal MSImageSet
+This functions returns a new Cardinal data set with the ROI metadata added to the Cardinal MSImageSet's ```featuredata```.
+
+```{r addrois}
+rk_peaks_rois <- addROIfromKey(rk_peaks, 
+              gloms_key, 
+              overlap_thresh = 0.1, 
+              xy_min = F,
+              show_images = F) #this will plot a binary image of each ROI, but can take very long, especially if there are a lot of ROIs.
+```
+
+# Do analysis on ROIs individually
+The ```featureApplyROIs``` wraps Cardinal's ```featureApply``` function for the ROIs added to the featureData using the regextract package. A data.frame where rows are ROIs and columns are intensity statistics is produced and can be saved with ```write.csv``` or other R table exporting functions.
+```{r calcmean}
+#here we calculate the mean for every peak in the data set for each ROI
+glom_means <- featureApplyROIs(rk_peaks_rois, func='mean')
+
+#look at resultant data.frame
+print(head(glom_means)[,1:5])
+```
+
+As the overlap of the ROI with each pixel (between 0 and 1) is also available when using regToolboxMSRC registration, we can weight observations in our calculations by changing the featureApplyROIs function.
+```{r calcweightedmean}
+#here we calculate the mean for every peak in the data set for each ROI
+glom_weighted_means <- featureApplyROIs(rk_peaks_rois, func='weighted.means')
+
+#look at resultant data.frame
+head(glom_weighted_means)[,1:5]
+```
+
+Other weighted functions include:
+```weighted.means```
+```weighted.sds```
+```weighted.medians```
+```weighted.vars```
+```weighted.MADs```
